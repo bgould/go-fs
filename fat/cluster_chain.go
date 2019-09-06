@@ -4,7 +4,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/mitchellh/go-fs"
+	"github.com/bgould/go-fs"
 )
 
 type ClusterChain struct {

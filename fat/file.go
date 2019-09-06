@@ -24,3 +24,7 @@ func (f *File) Write(p []byte) (n int, err error) {
 
 	return f.chain.Write(p)
 }
+
+func (f *File) FileSize() uint32 {
+	return f.entry.fileSize
+}

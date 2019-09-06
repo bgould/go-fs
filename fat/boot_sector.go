@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/mitchellh/go-fs"
+	"github.com/bgould/go-fs"
 )
 
 type MediaType uint8

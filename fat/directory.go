@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchellh/go-fs"
+	"github.com/bgould/go-fs"
 )
 
 // Directory implements fs.Directory and is used to interface with

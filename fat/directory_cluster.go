@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode/utf16"
 
-	"github.com/mitchellh/go-fs"
+	"github.com/bgould/go-fs"
 )
 
 type DirectoryAttr uint8
@@ -83,22 +83,34 @@ func DecodeDirectoryCluster(startCluster uint32, device fs.BlockDevice, fat *FAT
 // DecodeFAT16RootDirectory decodes the FAT16 root directory structure
 // from the device.
 func DecodeFAT16RootDirectoryCluster(device fs.BlockDevice, bs *BootSectorCommon) (*DirectoryCluster, error) {
-	data := make([]byte, DirectoryEntrySize*bs.RootEntryCount)
-	if _, err := device.ReadAt(data, int64(bs.RootDirOffset())); err != nil {
-		return nil, err
+	start := int64(bs.RootDirOffset())
+	entries := make([]*DirectoryClusterEntry, 0)
+	entryData := make([]byte, DirectoryEntrySize)
+	for i := uint16(0); i < uint16(bs.RootEntryCount); i++ {
+		//print("Decoding directory cluster: ")
+		//println(i)
+		offset := i * DirectoryEntrySize
+		if _, err := device.ReadAt(entryData, start+int64(offset)); err != nil {
+			return nil, fmt.Errorf(
+				"could not read data for root entry %d: %s", i, err.Error())
+		}
+		if entryData[0] == 0 {
+			break
+		}
+		entry, err := DecodeDirectoryClusterEntry(entryData)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
 	}
-
-	result, err := decodeDirectoryCluster(data, bs)
-	if err != nil {
-		return nil, err
-	}
-
-	result.fat16Root = true
-	return result, nil
+	return &DirectoryCluster{
+		fat16Root: true,
+		entries:   entries,
+	}, nil
 }
 
 func decodeDirectoryCluster(data []byte, bs *BootSectorCommon) (*DirectoryCluster, error) {
-	entries := make([]*DirectoryClusterEntry, 0, bs.RootEntryCount)
+	entries := make([]*DirectoryClusterEntry, 0)
 	for i := uint16(0); i < uint16(len(data)/DirectoryEntrySize); i++ {
 		offset := i * DirectoryEntrySize
 		entryData := data[offset : offset+DirectoryEntrySize]
@@ -346,20 +358,22 @@ func DecodeDirectoryClusterEntry(data []byte) (*DirectoryClusterEntry, error) {
 		result.name = strings.TrimRight(string(data[0:8]), " ")
 		result.ext = strings.TrimRight(string(data[8:11]), " ")
 
-		// Creation time
-		createTimeTenths := data[13]
-		createTimeWord := binary.LittleEndian.Uint16(data[14:16])
-		createDateWord := binary.LittleEndian.Uint16(data[16:18])
-		result.createTime = decodeDOSTime(createDateWord, createTimeWord, createTimeTenths)
+		/*
+			// Creation time
+			createTimeTenths := data[13]
+			createTimeWord := binary.LittleEndian.Uint16(data[14:16])
+			createDateWord := binary.LittleEndian.Uint16(data[16:18])
+			result.createTime = decodeDOSTime(createDateWord, createTimeWord, createTimeTenths)
 
-		// Access time
-		accessDateWord := binary.LittleEndian.Uint16(data[18:20])
-		result.accessTime = decodeDOSTime(accessDateWord, 0, 0)
+			// Access time
+			accessDateWord := binary.LittleEndian.Uint16(data[18:20])
+			result.accessTime = decodeDOSTime(accessDateWord, 0, 0)
 
-		// Write time
-		writeTimeWord := binary.LittleEndian.Uint16(data[22:24])
-		writeDateWord := binary.LittleEndian.Uint16(data[24:26])
-		result.writeTime = decodeDOSTime(writeDateWord, writeTimeWord, 0)
+			// Write time
+			writeTimeWord := binary.LittleEndian.Uint16(data[22:24])
+			writeDateWord := binary.LittleEndian.Uint16(data[24:26])
+			result.writeTime = decodeDOSTime(writeDateWord, writeTimeWord, 0)
+		*/
 
 		// Cluster
 		result.cluster = uint32(binary.LittleEndian.Uint16(data[20:22]))
