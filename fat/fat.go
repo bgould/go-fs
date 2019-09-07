@@ -3,6 +3,7 @@ package fat
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/bgould/go-fs"
@@ -18,14 +19,9 @@ type FAT struct {
 	entries []uint32
 }
 
-func DecodeFAT(device fs.BlockDevice, bs *BootSectorCommon, n int) (*FAT, error) {
+func DecodeFAT(device fs.BlockDevice, bs *BootSectorCommon, n int) (fat *FAT, err error) {
 	if n > int(bs.NumFATs) {
 		return nil, fmt.Errorf("FAT #%d greater than total FATs: %d", n, bs.NumFATs)
-	}
-
-	data := make([]byte, bs.SectorsPerFat*uint32(bs.BytesPerSector))
-	if _, err := device.ReadAt(data, int64(bs.FATOffset(n))); err != nil {
-		return nil, err
 	}
 
 	result := &FAT{
@@ -38,11 +34,15 @@ func DecodeFAT(device fs.BlockDevice, bs *BootSectorCommon, n int) (*FAT, error)
 		var entryData uint32
 		switch fatType {
 		case FAT12:
-			entryData = fatReadEntry12(data, i)
+			entryData, err = fatReadEntry12(device, i)
 		case FAT16:
-			entryData = fatReadEntry16(data, i)
+			entryData, err = fatReadEntry16(device, i)
 		default:
-			entryData = fatReadEntry32(data, i)
+			entryData, err = fatReadEntry32(device, i)
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("error reading FAT entry %d: %s", i, err.Error())
 		}
 
 		result.entries[i] = entryData
@@ -244,26 +244,38 @@ func FATEntryCount(bs *BootSectorCommon) uint32 {
 	return entryCount
 }
 
-func fatReadEntry12(data []byte, idx int) uint32 {
+func fatReadEntry12(device io.ReaderAt, idx int) (uint32, error) {
 	idx += idx / 2
+	data := make([]byte, 2)
+	if _, err := device.ReadAt(data, int64(idx)); err != nil {
+		return 0, err
+	}
 
-	var result uint32 = (uint32(data[idx+1]) << 8) | uint32(data[idx])
+	var result uint32 = (uint32(data[1]) << 8) | uint32(data[0])
 	if idx%2 == 0 {
-		return result & 0xFFF
+		return result & 0xFFF, nil
 	} else {
-		return result >> 4
+		return result >> 4, nil
 	}
 }
 
-func fatReadEntry16(data []byte, idx int) uint32 {
+func fatReadEntry16(device io.ReaderAt, idx int) (uint32, error) {
 	idx <<= 1
-	return (uint32(data[idx+1]) << 8) | uint32(data[idx])
+	data := make([]byte, 2)
+	if _, err := device.ReadAt(data, int64(idx)); err != nil {
+		return 0, err
+	}
+	return (uint32(data[1]) << 8) | uint32(data[0]), nil
 }
 
-func fatReadEntry32(data []byte, idx int) uint32 {
+func fatReadEntry32(device io.ReaderAt, idx int) (uint32, error) {
 	idx <<= 2
-	return (uint32(data[idx+3]) << 24) |
-		(uint32(data[idx+2]) << 16) |
-		(uint32(data[idx+1]) << 8) |
-		uint32(data[idx+0])
+	data := make([]byte, 4)
+	if _, err := device.ReadAt(data, int64(idx)); err != nil {
+		return 0, err
+	}
+	return (uint32(data[3]) << 24) |
+		(uint32(data[2]) << 16) |
+		(uint32(data[1]) << 8) |
+		uint32(data[0]), nil
 }
