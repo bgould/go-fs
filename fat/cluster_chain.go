@@ -15,7 +15,7 @@ type ClusterChain struct {
 	writeOffset  uint32
 }
 
-func (c *ClusterChain) Read(p []byte) (n int, err error) {
+func (c *ClusterChain) read(p []byte) (n int, err error) {
 	bpc := c.fat.bs.BytesPerCluster()
 	chain := c.fat.Chain(c.startCluster)
 
